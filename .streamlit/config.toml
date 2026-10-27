@@ -1,0 +1,7 @@
+# The app's custom styling is designed for the light theme
+[theme]
+base = "light"
+textColor = "#1e293b"
+
+[browser]
+gatherUsageStats = false

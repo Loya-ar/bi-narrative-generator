@@ -1,0 +1,303 @@
+/* Import professional font */
+@import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap');
+
+/* Main app styling - light background */
+.main {
+    background: #f8fafc;
+    font-family: 'Inter', sans-serif;
+}
+
+/* Container styling - white cards */
+.block-container {
+    background: white;
+    border-radius: 12px;
+    box-shadow: 0 4px 12px rgba(0,0,0,0.05);
+    margin: 1rem;
+    padding: 2rem;
+    max-width: 1200px;
+    border: 1px solid #e2e8f0;
+}
+
+
+/* Metric cards - dark background with white text */
+div[data-testid="metric-container"] {
+    background: #1e293b !important;
+    border-radius: 12px !important;
+    padding: 1.5rem !important;
+    box-shadow: 0 4px 12px rgba(30, 41, 59, 0.15) !important;
+    border: none !important;
+}
+
+div[data-testid="metric-container"] * {
+    color: white !important;
+    font-weight: 600 !important;
+}
+
+div[data-testid="metric-container"] [data-testid="metric-label"] {
+    color: #cbd5e1 !important;
+    font-size: 0.875rem !important;
+}
+
+div[data-testid="metric-container"] [data-testid="metric-value"] {
+    color: white !important;
+    font-size: 1.5rem !important;
+    font-weight: 700 !important;
+}
+
+/* Button styling - good contrast */
+.stButton > button {
+    background: #3b82f6 !important;
+    color: white !important;
+    border: none !important;
+    border-radius: 8px !important;
+    padding: 0.75rem 1.5rem !important;
+    font-weight: 600 !important;
+    font-size: 0.875rem !important;
+    transition: all 0.2s ease !important;
+    width: 100% !important;
+}
+
+.stButton > button:hover {
+    background: #2563eb !important;
+    transform: translateY(-1px) !important;
+    box-shadow: 0 4px 12px rgba(59, 130, 246, 0.3) !important;
+}
+
+/* Tab styling - clear contrast */
+.stTabs [data-baseweb="tab-list"] {
+    gap: 4px;
+    background: #f1f5f9;
+    padding: 6px;
+    border-radius: 10px;
+    border: 1px solid #e2e8f0;
+}
+
+.stTabs [data-baseweb="tab"] {
+    background: white !important;
+    color: #475569 !important;
+    border-radius: 6px !important;
+    padding: 0.75rem 1.25rem !important;
+    font-weight: 500 !important;
+    border: 1px solid #e2e8f0 !important;
+    font-size: 0.9rem !important;
+}
+
+.stTabs [aria-selected="true"] {
+    background: #3b82f6 !important;
+    color: white !important;
+    border: 1px solid #3b82f6 !important;
+    font-weight: 600 !important;
+}
+
+/* File uploader - force light styling */
+.stFileUploader, .stFileUploader * {
+    background: transparent !important;
+}
+
+.stFileUploader > div {
+    background: linear-gradient(135deg, #eff6ff 0%, #dbeafe 100%) !important;
+    border: 2px dashed #2563eb !important;
+    border-radius: 12px !important;
+    padding: 2rem !important;
+    text-align: center !important;
+}
+
+.stFileUploader label {
+    color: #1e40af !important;
+    font-weight: 700 !important;
+    font-size: 1.1rem !important;
+}
+
+/* File uploader inner areas */
+.stFileUploader div[data-testid="stFileUploaderDropzone"] {
+    background: linear-gradient(135deg, #eff6ff 0%, #dbeafe 100%) !important;
+    border: 2px dashed #2563eb !important;
+    border-radius: 12px !important;
+    color: #1e40af !important;
+}
+
+.stFileUploader div[data-testid="stFileUploaderDropzoneInstructions"] {
+    background: transparent !important;
+    color: #1e40af !important;
+}
+
+.stFileUploader div[data-testid="stFileUploaderDropzoneInstructions"] span {
+    color: #1e40af !important;
+    font-weight: 500 !important;
+}
+
+/* Upload button */
+.stFileUploader button {
+    background: #1d4ed8 !important;
+    color: white !important;
+    border: none !important;
+    border-radius: 8px !important;
+    padding: 0.6rem 1.2rem !important;
+    font-weight: 600 !important;
+}
+
+/* Uploaded file container - clean white */
+.stFileUploader div[data-testid="fileUploadContainer"] {
+    background: white !important;
+    border: 2px solid #2563eb !important;
+    border-radius: 8px !important;
+    padding: 1rem !important;
+    margin-top: 1rem !important;
+}
+
+/* File name and size text */
+.stFileUploader div[data-testid="fileUploadContainer"] span {
+    color: #1e293b !important;
+    font-weight: 600 !important;
+}
+
+/* Force all file uploader text to be dark blue */
+.stFileUploader * {
+    color: #1e40af !important;
+}
+
+/* File uploader when dragging */
+.stFileUploader div[data-testid="stFileUploaderDropzone"]:hover {
+    background: linear-gradient(135deg, #dbeafe 0%, #bfdbfe 100%) !important;
+    border-color: #1d4ed8 !important;
+}
+
+/* Select boxes - readable */
+.stSelectbox > div > div {
+    background-color: white !important;
+    border: 2px solid #e2e8f0 !important;
+    border-radius: 8px !important;
+    color: #1e293b !important;
+}
+
+.stSelectbox label {
+    color: #1e293b !important;
+    font-weight: 600 !important;
+}
+
+/* Progress bars */
+.stProgress .st-bo {
+    background: #3b82f6 !important;
+}
+
+/* Alert messages - good contrast */
+.stSuccess {
+    background: #f0fdf4 !important;
+    border: 1px solid #22c55e !important;
+    border-radius: 8px !important;
+    color: #166534 !important;
+}
+
+.stInfo {
+    background: #eff6ff !important;
+    border: 1px solid #3b82f6 !important;
+    border-radius: 8px !important;
+    color: #1e40af !important;
+}
+
+.stWarning {
+    background: #fffbeb !important;
+    border: 1px solid #f59e0b !important;
+    border-radius: 8px !important;
+    color: #92400e !important;
+}
+
+.stError {
+    background: #fef2f2 !important;
+    border: 1px solid #ef4444 !important;
+    border-radius: 8px !important;
+    color: #dc2626 !important;
+}
+
+/* Headers - always dark and readable */
+h1, h2, h3, h4, h5, h6 {
+    font-weight: 700 !important;
+    font-family: 'Inter', sans-serif !important;
+}
+
+/* Upload button: keep its label white on the blue background */
+[data-testid="stFileUploaderDropzone"] button, [data-testid="stFileUploaderDropzone"] button * {
+    color: white !important;
+}
+
+/* Regular text (icon spans keep Streamlit's icon font) */
+p, span:not([data-testid="stIconMaterial"]), div, label {
+    font-family: 'Inter', sans-serif !important;
+}
+
+/* Dataframe styling */
+.stDataFrame {
+    background: white !important;
+    border: 1px solid #e2e8f0 !important;
+    border-radius: 8px !important;
+}
+
+/* Sidebar styling */
+.css-1d391kg {
+    background: #f8fafc !important;
+    border-right: 1px solid #e2e8f0 !important;
+}
+
+/* Toggle switches */
+.st-emotion-cache-1v0mbdj {
+    color: #1e293b !important;
+}
+
+/* Expander styling */
+.stExpander {
+    background: white !important;
+    border: 1px solid #e2e8f0 !important;
+    border-radius: 8px !important;
+}
+
+.stExpander > div > div > div {
+    color: #1e293b !important;
+}
+
+/* JSON display - light and readable */
+.stJson {
+    background: #f8fafc !important;
+    border: 1px solid #e2e8f0 !important;
+    border-radius: 8px !important;
+    padding: 1rem !important;
+}
+
+.stJson > div {
+    background: #f8fafc !important;
+    color: #1e293b !important;
+}
+
+/* JSON text inside */
+.stJson * {
+    color: #1e293b !important;
+    background: transparent !important;
+}
+
+/* JSON keys and values */
+.stJson .json-key {
+    color: #0c4a6e !important;
+    font-weight: 600 !important;
+}
+
+.stJson .json-value {
+    color: #1e293b !important;
+}
+
+/* Code blocks - light and readable */
+.stCode {
+    background: #f1f5f9 !important;
+    border: 1px solid #e2e8f0 !important;
+    color: #1e293b !important;
+    border-radius: 6px !important;
+    padding: 0.5rem !important;
+}
+
+.stCode code {
+    color: #1e293b !important;
+    background: #f1f5f9 !important;
+}
+
+/* Spinner text */
+.stSpinner > div {
+    color: #1e293b !important;
+}

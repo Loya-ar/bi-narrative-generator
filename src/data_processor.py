@@ -3,6 +3,8 @@ Advanced Data Processor - Working Implementation
 Author: Arjun Loya
 """
 
+import re
+
 import pandas as pd
 import numpy as np
 from scipy import stats
@@ -46,13 +48,17 @@ class AdvancedDataProcessor:
     
     def _analyze_dataframe(self, df):
         """Perform comprehensive DataFrame analysis."""
+        monthly = self._monthly(df)
         results = {
             'metadata': self._get_metadata(df),
-            'trends': self._analyze_trends(df),
+            'trends': self._analyze_trends(df, monthly),
             'insights': self._generate_insights(df),
             'business_domain': self._detect_domain(df),
             'kpis': self._calculate_kpis(df),
-            'correlations': self._analyze_correlations(df)
+            'correlations': self._analyze_correlations(df),
+            'period_comparisons': self._period_comparisons(monthly),
+            'drivers': self._drivers(df, monthly),
+            'anomalies': self._anomalies(monthly),
         }
         return results
     
@@ -88,34 +94,67 @@ class AdvancedDataProcessor:
                 return col, parsed
         return None, None
 
-    def _analyze_trends(self, df):
+    # Measures that are rates or ratios: averaged per month. Everything else is summed.
+    # Matched as whole words, so "Operational" doesn't count as "ratio".
+    _RATIO_WORDS = {'rate', 'percent', 'pct', 'ratio', 'margin', 'per', 'ctr', 'roas',
+                    'score', 'average', 'avg'}
+    _RATIO_PHRASES = ('return_on', 'acquisition_cost', 'lifetime_value')
+    _MIN_CHANGE_TO_EXPLAIN = 5.0  # % change below which a segment breakdown isn't shown
+    _SIGNIFICANCE = 0.05   # a trend counts only if the regression p-value is below this
+    _MAX_MEASURES = 5      # measures analysed per file
+    _MAX_SEGMENTS = 12     # a column with more distinct values isn't used to explain changes
+
+    def _measures(self, df):
+        return [c for c in df.select_dtypes(include=[np.number]).columns
+                if not any(c.lower() == w or c.lower().endswith('_' + w) or c.lower().startswith(w + '_')
+                           for w in self._NON_MEASURES)]
+
+    def _aggregation(self, col):
+        name = col.lower()
+        words = set(re.split(r'[^a-z]+', name))
+        is_ratio = bool(words & self._RATIO_WORDS) or any(p in name for p in self._RATIO_PHRASES)
+        return 'mean' if is_ratio else 'sum'
+
+    def _monthly(self, df):
+        """Monthly totals (or averages, for rates) of each measure, or None without a date column.
+
+        Returns {'table': DataFrame indexed by month, 'agg': {measure: 'sum'|'mean'},
+                 'periods': month of each row, 'measures': [...]}.
+        """
+        date_col, parsed_dates = self._find_date_column(df)
+        if date_col is None:
+            return None
+        measures = self._measures(df)[:self._MAX_MEASURES]
+        if not measures:
+            return None
+        periods = parsed_dates.dt.to_period('M')
+        agg = {c: self._aggregation(c) for c in measures}
+        table = df.assign(_period=periods).dropna(subset=['_period']).groupby('_period')[measures].agg(agg)
+        return {'table': table, 'agg': agg, 'periods': periods, 'measures': measures}
+
+    def _analyze_trends(self, df, monthly=None):
         """Analyze trends in numeric columns.
 
-        With a date column, each measure is averaged per month and the trend is
-        fitted on those monthly values. Without one, rows are taken in file order
-        and the change compares the first and last 10% of rows.
+        With a date column, each measure is totalled per month (averaged for rates and
+        ratios) and the trend is fitted on those monthly values. Without one, rows are
+        taken in file order and the change compares the first and last 10% of rows.
         """
         trends = {}
-        measures = [c for c in df.select_dtypes(include=[np.number]).columns
-                    if not any(c.lower() == w or c.lower().endswith('_' + w) or c.lower().startswith(w + '_')
-                               for w in self._NON_MEASURES)]
-        date_col, parsed_dates = self._find_date_column(df)
-
-        if date_col is not None:
-            monthly = (df.assign(_period=parsed_dates.dt.to_period('M'))
-                         .dropna(subset=['_period'])
-                         .groupby('_period')[measures].mean())
-            series_by_col = {c: monthly[c] for c in measures}
+        if monthly is not None:
+            measures = monthly['measures']
+            series_by_col = {c: monthly['table'][c] for c in measures}
             period = 'month'
         else:
+            measures = self._measures(df)[:self._MAX_MEASURES]
             series_by_col = {c: df[c] for c in measures}
             period = 'row'
 
-        for col in measures[:5]:  # Analyze top 5 columns
+        for col in measures:
             series = series_by_col[col].dropna()
             if len(series) >= 3 and (period == 'month' or len(series) > 10):
                 trend_data = self._analyze_column_trend(series, period)
                 trend_data['is_currency'] = any(w in col.lower() for w in self._CURRENCY_WORDS)
+                trend_data['aggregation'] = monthly['agg'][col] if monthly is not None else 'row'
                 trends[col] = trend_data
 
         return trends
@@ -132,9 +171,14 @@ class AdvancedDataProcessor:
         y = clean_series.values.astype(float)
 
         slope, intercept, r_value, p_value, std_err = stats.linregress(x, y)
+        significant = bool(p_value < self._SIGNIFICANCE)
 
-        # Determine trend
-        if abs(slope) * len(y) < np.std(y) * 0.5:
+        # Determine trend: a direction is claimed only when the slope is statistically
+        # significant; otherwise the series is noise around a level, whatever its sign.
+        if not significant:
+            direction = 'no_clear_trend'
+            strength = 'none'
+        elif abs(slope) * len(y) < np.std(y) * 0.5:
             direction = 'stable'
             strength = 'weak'
         elif slope > 0:
@@ -157,10 +201,117 @@ class AdvancedDataProcessor:
             'current_value': last_val,
             'average_value': np.mean(y),
             'r_squared': r_value**2,
+            'p_value': p_value,
+            'significant': significant,
             'slope': slope,
             'period': period,
             'volatility_level': 'high' if np.std(y) / abs(np.mean(y)) > 0.3 else 'low'
         }
+
+    def _period_comparisons(self, monthly):
+        """Latest month vs the month before, and vs the same month a year earlier."""
+        if monthly is None:
+            return {}
+        table, out = monthly['table'], {}
+        for col in monthly['measures']:
+            series = table[col].dropna()
+            if len(series) < 2:
+                continue
+            latest_period, latest, previous = series.index[-1], series.iloc[-1], series.iloc[-2]
+            entry = {
+                'aggregation': monthly['agg'][col],
+                'latest_period': str(latest_period),
+                'latest_value': float(latest),
+                'previous_period': str(series.index[-2]),
+                'previous_value': float(previous),
+                'mom_change_pct': self._pct_change(previous, latest),
+                'yoy_period': None,
+                'yoy_value': None,
+                'yoy_change_pct': None,
+            }
+            year_ago = latest_period - 12
+            if year_ago in series.index:
+                entry.update(yoy_period=str(year_ago), yoy_value=float(series[year_ago]),
+                             yoy_change_pct=self._pct_change(series[year_ago], latest))
+            out[col] = entry
+        return out
+
+    @staticmethod
+    def _pct_change(old, new):
+        return float((new - old) / abs(old) * 100) if old else None
+
+    def _segment_columns(self, df):
+        """Text columns with 2-12 values that describe a segment (region, product, channel...)."""
+        date_parts = ('month', 'quarter', 'day', 'week', 'year', 'date', 'time', 'period')
+        return [c for c in df.select_dtypes(include=['object', 'category', 'string']).columns
+                if not any(w in c.lower() for w in date_parts)
+                and 2 <= df[c].nunique() <= self._MAX_SEGMENTS]
+
+    def _drivers(self, df, monthly, max_dimensions=2, top=3):
+        """Which segments drove the change in the main measure, first month to last.
+
+        Only for summed measures (a share of a change in an average isn't additive).
+        """
+        if monthly is None:
+            return {}
+        summed = [c for c in monthly['measures'] if monthly['agg'][c] == 'sum']
+        if not summed:
+            return {}
+        measure = next((c for c in summed if any(w in c.lower() for w in self._CURRENCY_WORDS)), summed[0])
+        periods = monthly['periods']
+        months = monthly['table'].index
+        first, last = months[0], months[-1]
+        if first == last:
+            return {}
+
+        out = {}
+        for dim in self._segment_columns(df)[:max_dimensions]:
+            frame = df.assign(_period=periods)
+            by_segment = (frame[frame['_period'].isin([first, last])]
+                          .groupby([dim, '_period'])[measure].sum().unstack(fill_value=0))
+            by_segment = by_segment.reindex(columns=[first, last], fill_value=0)
+            change = by_segment[last] - by_segment[first]
+            total_change = change.sum()
+            total_change_pct = self._pct_change(by_segment[first].sum(), by_segment[last].sum())
+            if not total_change or total_change_pct is None or abs(total_change_pct) < self._MIN_CHANGE_TO_EXPLAIN:
+                continue
+            ranked = change.reindex(change.abs().sort_values(ascending=False).index)[:top]
+            out[dim] = {
+                'measure': measure,
+                'from_period': str(first),
+                'to_period': str(last),
+                'total_change': float(total_change),
+                'total_change_pct': total_change_pct,
+                'segments': [{'segment': str(seg), 'change': float(v),
+                              'share_of_change_pct': float(v / total_change * 100)}
+                             for seg, v in ranked.items()],
+            }
+        return out
+
+    def _anomalies(self, monthly, threshold=3.5, limit=5):
+        """Months far from the usual level (robust z-score on median and MAD above 3.5)."""
+        if monthly is None:
+            return []
+        found = []
+        for col in monthly['measures']:
+            series = monthly['table'][col].dropna()
+            if len(series) < 6:
+                continue
+            median = series.median()
+            mad = (series - median).abs().median()
+            if not mad:
+                continue
+            robust_z = 0.6745 * (series - median) / mad
+            for period, z in robust_z[robust_z.abs() > threshold].items():
+                found.append({
+                    'measure': col,
+                    'period': str(period),
+                    'value': float(series[period]),
+                    'typical_value': float(median),
+                    'deviation_pct': self._pct_change(median, series[period]),
+                    'robust_z': float(z),
+                })
+        return sorted(found, key=lambda a: -abs(a['robust_z']))[:limit]
 
     def _detect_domain(self, df):
         """Detect business domain from column names."""

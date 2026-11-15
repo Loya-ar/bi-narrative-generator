@@ -82,7 +82,41 @@ KEY PERFORMANCE TRENDS:
                 
                 span = 'first to last month' if trend_data.get('period') == 'month' else 'start to end of file'
                 prefix = '$' if trend_data.get('is_currency') else ''
-                prompt += f"- {metric.replace('_', ' ').title()}: {direction} trend ({change_pct:+.1f}% {span}), {strength} fit, latest value {prefix}{current_val:,.2f}\n"
+                name = metric.replace('_', ' ').title()
+                if direction == 'no_clear_trend':
+                    p = trend_data.get('p_value')
+                    prompt += (f"- {name}: no statistically clear trend (p = {p:.2f}; ups and downs, "
+                               f"not a direction). First to last: {change_pct:+.1f}%, latest {prefix}{current_val:,.2f}\n")
+                else:
+                    prompt += f"- {name}: {direction} trend ({change_pct:+.1f}% {span}), {strength} fit, latest value {prefix}{current_val:,.2f}\n"
+
+        # Latest month vs the month before and a year before
+        comparisons = analysis_results.get('period_comparisons', {})
+        if comparisons:
+            prompt += "\nLATEST MONTH COMPARISONS:\n"
+            for metric, c in list(comparisons.items())[:3]:
+                line = f"- {metric.replace('_', ' ').title()}: {c['mom_change_pct']:+.1f}% vs {c['previous_period']}" \
+                    if c.get('mom_change_pct') is not None else f"- {metric.replace('_', ' ').title()}:"
+                if c.get('yoy_change_pct') is not None:
+                    line += f", {c['yoy_change_pct']:+.1f}% vs {c['yoy_period']} (year over year)"
+                prompt += line + f" (latest month {c['latest_period']})\n"
+
+        # Which segments drove the change
+        drivers = analysis_results.get('drivers', {})
+        if drivers:
+            prompt += "\nWHAT DROVE THE CHANGE:\n"
+            for dim, d in drivers.items():
+                parts = ", ".join(f"{s['segment']} {s['share_of_change_pct']:.0f}%" for s in d['segments'])
+                prompt += (f"- {d['measure'].replace('_', ' ').title()} {d['total_change_pct']:+.1f}% "
+                           f"({d['from_period']} to {d['to_period']}); share of the change by {dim.replace('_', ' ')}: {parts}\n")
+
+        # Unusual months
+        anomalies = analysis_results.get('anomalies', [])
+        if anomalies:
+            prompt += "\nUNUSUAL MONTHS:\n"
+            for a in anomalies[:3]:
+                prompt += (f"- {a['measure'].replace('_', ' ').title()} in {a['period']}: "
+                           f"{a['deviation_pct']:+.1f}% vs a typical month\n")
         
         # Add insights to prompt
         if insights:

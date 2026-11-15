@@ -28,7 +28,7 @@ CSV / Excel ──► Data processor ──► Prompt engine ──► Gemini �
 
 | Step | What happens | Code |
 |---|---|---|
-| **Analyse** | Detects the business domain from column names. Computes monthly trends (when there's a date column), KPIs, correlations and a data-quality score | `src/data_processor.py` |
+| **Analyse** | Detects the business domain from column names. With a date column, totals each measure per month (rates and ratios are averaged), then: a trend that's called increasing or decreasing only if the regression p-value is below 0.05; the latest month vs the month before and the same month a year earlier; which segments (region, product, channel...) drove the change from the first to the last month; and unusual months (robust z-score above 3.5). Also KPIs, correlations and a data-quality score | `src/data_processor.py` |
 | **Visualise** | Monthly trend line, breakdown by category and a correlation heatmap. Each chart also gets a one-line description with real numbers | `src/app.py`, `src/visualizer.py` |
 | **Prompt** | Builds a prompt from the analysis, the chosen **style** (4), **audience** (4) and **domain** (5), plus the chart descriptions so the model can refer to the charts | `src/prompt_engine.py` |
 | **Generate** | Adds a fact sheet (every number the analysis computed, with an id) and asks Gemini (`gemini-3.5-flash-lite` by default, free tier) for JSON: the report plus, for each number, the fact it came from. Without a key, or if the call fails, it shows a pre-written demo narrative and labels it as such | `src/narrative_generator.py` |
@@ -133,10 +133,12 @@ Regenerate the main ones with `python scripts/generate_sample_data.py`.
 pytest
 ```
 
-34 tests cover the analysis output, domain detection, monthly trend calculation, that every sample dataset loads, prompt adaptation to style and audience, demo mode without a key, the quality scorer, the chart helpers, and the number checker: parsing formats like `$1.2M` and `12.3%`, rounding, wrong versus unsupported numbers, highlighting, and the correction pass (with a fake Gemini). None of them calls the API.
+57 tests cover the analysis output, the period analysis (significance, month-over-month and year-over-year, segment drivers, unusual months) on synthetic data with known answers, domain detection, monthly trend calculation, that every sample dataset loads, prompt adaptation to style and audience, demo mode without a key, the quality scorer, the chart helpers, and the number checker: parsing formats like `$1.2M` and `12.3%`, rounding, wrong versus unsupported numbers, highlighting, and the correction pass (with a fake Gemini). None of them calls the API.
 
 ## Limitations
 
+- **Changes compare single months** (first vs last month, latest vs previous), which can be noisy, and a partial first or last month makes totals look smaller. The p-value test guards the trend label, not these comparisons.
+- **Driver shares can exceed 100%** when other segments fell, and the breakdown is skipped for changes under 5%.
 - **The number check confirms a number exists in the analysis, not that the sentence uses it correctly.** "Revenue fell 12%" passes if 12% is a real change, even if the sentence mixes up which measure fell. Signs are ignored, and a rounded number (e.g. 12%) can match any fact that rounds to it.
 - **The quality score is a heuristic.** It checks for things like headings, business vocabulary, figures and recommendation verbs. It doesn't judge accuracy.
 - **Demo mode shows pre-written text** that isn't based on your data. Real, data-specific narratives need a Gemini API key.

@@ -35,7 +35,8 @@ class Fact:
 
     def shown(self) -> str:
         if self.unit == "%":
-            return f"{self.value:+.1f}%" if "change" in self.id else f"{self.value:.1f}%"
+            signed = any(w in self.id for w in ("change", "mom", "yoy", "deviation"))
+            return f"{self.value:+.1f}%" if signed else f"{self.value:.1f}%"
         if self.unit == "$":
             return f"${self.value:,.2f}"
         if float(self.value).is_integer():
@@ -90,6 +91,10 @@ def _pretty(name: str) -> str:
     return str(name).replace("_", " ").strip().title()
 
 
+def _slug(name) -> str:
+    return re.sub(r"[^a-z0-9]+", "_", str(name).lower()).strip("_")
+
+
 def build_fact_sheet(analysis: dict) -> list[Fact]:
     """Every number the analysis computed, with a stable id and a readable label."""
     facts: list[Fact] = []
@@ -104,16 +109,59 @@ def build_fact_sheet(analysis: dict) -> list[Fact]:
     add("meta.columns", "Columns in the dataset", meta.get("total_columns"))
     add("meta.data_quality", "Data quality score (0-100)", meta.get("data_quality_score"))
 
-    for metric, t in (analysis.get("trends") or {}).items():
+    trends = analysis.get("trends") or {}
+
+    def money_unit(metric):
+        t = trends.get(metric) or {}
+        return "$" if t.get("is_currency") else ""
+
+    def how(metric, agg=None):
+        agg = agg or (trends.get(metric) or {}).get("aggregation")
+        return {"sum": "monthly total", "mean": "monthly average"}.get(agg, "value")
+
+    for metric, t in trends.items():
         if not isinstance(t, dict) or "total_change_percent" not in t:
             continue
         name = _pretty(metric)
         span = "first to last month" if t.get("period") == "month" else "start to end of file"
-        money = "$" if t.get("is_currency") else ""
+        money = money_unit(metric)
         add(f"trend.{metric}.change_pct", f"{name}: change, {span}", t.get("total_change_percent"), "%")
-        add(f"trend.{metric}.latest", f"{name}: latest value", t.get("current_value"), money)
-        add(f"trend.{metric}.average", f"{name}: average value", t.get("average_value"), money)
+        add(f"trend.{metric}.latest", f"{name}: latest {how(metric)}", t.get("current_value"), money)
+        average_label = "average of the monthly averages" if how(metric) == "monthly average" else f"average {how(metric)}"
+        add(f"trend.{metric}.average", f"{name}: {average_label}", t.get("average_value"), money)
         add(f"trend.{metric}.r_squared", f"{name}: trend fit (R squared, 0-1)", t.get("r_squared"))
+        add(f"trend.{metric}.p_value", f"{name}: trend p-value (below 0.05 = statistically clear)", t.get("p_value"))
+
+    for metric, c in (analysis.get("period_comparisons") or {}).items():
+        name, money, kind = _pretty(metric), money_unit(metric), how(metric, c.get("aggregation"))
+        add(f"cmp.{metric}.latest", f"{name}: {kind}, {c.get('latest_period')}", c.get("latest_value"), money)
+        add(f"cmp.{metric}.previous", f"{name}: {kind}, {c.get('previous_period')}", c.get("previous_value"), money)
+        add(f"cmp.{metric}.mom_pct", f"{name}: change {c.get('previous_period')} to {c.get('latest_period')}",
+            c.get("mom_change_pct"), "%")
+        if c.get("yoy_period"):
+            add(f"cmp.{metric}.yoy_value", f"{name}: {kind}, {c.get('yoy_period')}", c.get("yoy_value"), money)
+            add(f"cmp.{metric}.yoy_pct", f"{name}: change {c.get('yoy_period')} to {c.get('latest_period')} "
+                                         "(year over year)", c.get("yoy_change_pct"), "%")
+
+    for dim, d in (analysis.get("drivers") or {}).items():
+        measure, span = _pretty(d.get("measure")), f"{d.get('from_period')} to {d.get('to_period')}"
+        money = money_unit(d.get("measure"))
+        add(f"driver.{dim}.total_change", f"{measure}: total change, {span}", d.get("total_change"), money)
+        add(f"driver.{dim}.total_change_pct", f"{measure}: % change, {span}", d.get("total_change_pct"), "%")
+        for s in d.get("segments") or []:
+            seg = _slug(s.get("segment"))
+            add(f"driver.{dim}.{seg}.change", f"{measure} change from {_pretty(dim)} = {s.get('segment')}, {span}",
+                s.get("change"), money)
+            add(f"driver.{dim}.{seg}.share_pct",
+                f"Share of the {measure} change from {_pretty(dim)} = {s.get('segment')}", s.get("share_of_change_pct"), "%")
+
+    for a in analysis.get("anomalies") or []:
+        metric, period = a.get("measure"), a.get("period")
+        name, money = _pretty(metric), money_unit(metric)
+        add(f"anomaly.{metric}.{period}.value", f"{name}: unusual month {period}, value", a.get("value"), money)
+        add(f"anomaly.{metric}.{period}.typical", f"{name}: typical month (median)", a.get("typical_value"), money)
+        add(f"anomaly.{metric}.{period}.deviation_pct", f"{name}: {period} vs typical month",
+            a.get("deviation_pct"), "%")
 
     for kpi, value in (analysis.get("kpis") or {}).items():
         money = "$" if any(w in kpi.lower() for w in ("sales", "revenue", "amount", "cost", "profit", "spend")) \

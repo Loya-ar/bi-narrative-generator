@@ -755,6 +755,48 @@ def run_comprehensive_analysis(df, file_path):
         st.error(f"❌ Analysis error: {e}")
         st.info("💡 Try using demo datasets or check data format")
 
+def show_period_analysis(results):
+    """Latest-month comparisons, what drove the change, and unusual months."""
+    comparisons = results.get('period_comparisons') or {}
+    drivers = results.get('drivers') or {}
+    anomalies = results.get('anomalies') or []
+    if not (comparisons or drivers or anomalies):
+        return
+
+    def pct(v):
+        return "–" if v is None else f"{v:+.1f}%"
+
+    if comparisons:
+        st.markdown("### 🗓️ Latest Month vs Earlier")
+        st.dataframe(pd.DataFrame([{
+            "Measure": m.replace('_', ' ').title(),
+            "Monthly": "total" if c['aggregation'] == 'sum' else "average",
+            "Latest month": c['latest_period'],
+            "Vs previous month": pct(c['mom_change_pct']),
+            "Vs same month last year": pct(c['yoy_change_pct']),
+        } for m, c in comparisons.items()]), hide_index=True, width="stretch")
+
+    if drivers:
+        st.markdown("### 🧭 What Drove the Change")
+        for dim, d in drivers.items():
+            st.caption(f"{d['measure'].replace('_', ' ').title()} {pct(d['total_change_pct'])} from "
+                       f"{d['from_period']} to {d['to_period']}, by {dim.replace('_', ' ')} "
+                       "(shares can exceed 100% when other segments fell)")
+            st.dataframe(pd.DataFrame([{
+                dim.replace('_', ' ').title(): s['segment'],
+                "Change": f"{s['change']:+,.0f}",
+                "Share of the change": f"{s['share_of_change_pct']:.0f}%",
+            } for s in d['segments']]), hide_index=True, width="stretch")
+
+    if anomalies:
+        st.markdown("### ⚠️ Unusual Months")
+        st.dataframe(pd.DataFrame([{
+            "Measure": a['measure'].replace('_', ' ').title(),
+            "Month": a['period'],
+            "Vs a typical month": pct(a['deviation_pct']),
+        } for a in anomalies]), hide_index=True, width="stretch")
+
+
 def analysis_results_section():
     """Display comprehensive analysis results."""
     
@@ -805,7 +847,10 @@ def analysis_results_section():
                 with col1:
                     direction = trend_data.get('trend_direction', 'stable')
                     direction_emoji = "📈" if direction == "increasing" else "📉" if direction == "decreasing" else "➡️"
-                    st.metric(f"{direction_emoji} Direction", direction.title())
+                    p = trend_data.get('p_value')
+                    st.metric(f"{direction_emoji} Direction", direction.replace('_', ' ').title(),
+                              help=(f"Linear trend p-value {p:.3f}. A direction is shown only below 0.05; "
+                                    "otherwise the changes are ups and downs, not a trend.") if p is not None else None)
                 
                 by_month = trend_data.get('period') == 'month'
                 with col2:
@@ -816,12 +861,16 @@ def analysis_results_section():
                 with col3:
                     current_value = trend_data.get('current_value', 0)
                     prefix = "$" if trend_data.get('is_currency') else ""
-                    st.metric("💰 Latest Month Avg" if by_month else "💰 Recent Avg",
+                    latest_label = {"sum": "💰 Latest Month Total", "mean": "💰 Latest Month Avg"}.get(
+                        trend_data.get('aggregation'), "💰 Recent Avg")
+                    st.metric(latest_label,
                               f"{prefix}{current_value:,.2f}" if abs(current_value) < 100 else f"{prefix}{current_value:,.0f}")
-                
+
                 with col4:
                     strength = trend_data.get('trend_strength', 'weak')
                     st.metric("💪 Strength", strength.title())
+
+    show_period_analysis(results)
     
     # Business Insights
     if insights:

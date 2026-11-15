@@ -43,6 +43,11 @@ numbers (differences, ratios, forecasts) and don't invent targets or benchmarks.
 """
 
 
+def _mean(values):
+    values = [v for v in values if v is not None]
+    return sum(values) / len(values) if values else None
+
+
 class Claim(BaseModel):
     text: str
     value: float
@@ -131,14 +136,13 @@ class NarrativeGenerator:
             # Calculate quality metrics
             result = {
                 'narrative': narrative_text,
-                'quality_score': self._assess_quality(narrative_text),
+                'number_check_score': check.score if check is not None else None,
                 'word_count': len(narrative_text.split()),
                 'generation_time': generation_time,
                 'estimated_cost': 0.00,  # free-tier key
                 'model_used': f'Google {self.model_name}',
                 'generation_method': 'gemini_api',
                 'narrative_type': narrative_type,
-                'meets_quality_threshold': len(narrative_text.split()) > 200,
                 'api_status': 'success',
                 'claims': claims,
                 'number_check': check,
@@ -151,7 +155,7 @@ class NarrativeGenerator:
                 'timestamp': datetime.now().isoformat(),
                 'prompt_preview': prompt[:100] + "...",
                 'result_preview': narrative_text[:100] + "...",
-                'quality_score': result['quality_score'],
+                'number_check_score': result['number_check_score'],
                 'word_count': result['word_count']
             })
             
@@ -161,32 +165,6 @@ class NarrativeGenerator:
         except Exception as e:
             print(f"Gemini API error: {e}")
             return self._handle_api_error(e, prompt, narrative_type, facts)
-    
-    def _assess_quality(self, narrative_text):
-        """Assess narrative quality with comprehensive metrics."""
-        words = narrative_text.split()
-        
-        quality_factors = {
-            'appropriate_length': 200 <= len(words) <= 3000,
-            'has_structure': any(marker in narrative_text for marker in ['##', '**', '1.', '2.', '•']),
-            'business_language': any(term in narrative_text.lower() for term in 
-                                   ['strategic', 'performance', 'analysis', 'recommendations', 'insights']),
-            'includes_metrics': any(char in narrative_text for char in ['%', '$', ':']),
-            'professional_tone': 'strategic' in narrative_text.lower() and 'executive' in narrative_text.lower(),
-            'actionable_content': any(word in narrative_text.lower() for word in 
-                                    ['recommend', 'should', 'implement', 'focus', 'prioritize']),
-            'data_driven': any(word in narrative_text.lower() for word in 
-                             ['data', 'analysis', 'trends', 'metrics', 'performance'])
-        }
-        
-        quality_score = sum(quality_factors.values()) / len(quality_factors) * 100
-        
-        # Bonus points for exceptional content
-        if len(words) > 500 and any(phrase in narrative_text.lower() for phrase in 
-                                   ['competitive advantage', 'strategic initiative', 'operational excellence']):
-            quality_score = min(100, quality_score + 5)
-        
-        return round(quality_score, 1)
     
     def _demo_mode_response(self, prompt, narrative_type, facts=None):
         """Pre-written sample narrative, used when no API key is set or the API call fails.
@@ -256,17 +234,16 @@ Establish quarterly performance reviews utilizing advanced analytics for continu
         
         return {
             'narrative': selected_narrative,
-            'quality_score': self._assess_quality(selected_narrative),
             'word_count': len(selected_narrative.split()),
             'generation_time': 0.0,
             'estimated_cost': 0.00,
             'model_used': 'Demo mode (pre-written sample, no API call)',
             'generation_method': 'demo_mode',
             'narrative_type': narrative_type,
-            'meets_quality_threshold': True,
             'api_status': 'demo_fallback',
             'claims': [],
             'number_check': check_report(selected_narrative, facts) if facts else None,
+            'number_check_score': None,  # the samples contain no figures
             'number_check_first_draft': None,
             'auto_fixed': False,
         }
@@ -331,7 +308,7 @@ Establish quarterly performance reviews utilizing advanced analytics for continu
             'total_generations': len(self.generation_history),
             'api_available': self.api_available,
             'model_used': self.model_name if self.api_available else 'Demo Mode',
-            'average_quality': sum(h['quality_score'] for h in self.generation_history) / max(1, len(self.generation_history)),
+            'average_number_check_score': _mean([h['number_check_score'] for h in self.generation_history]),
             'total_words_generated': sum(h['word_count'] for h in self.generation_history),
             'generation_history': self.generation_history[-5:]  # Last 5 generations
         }

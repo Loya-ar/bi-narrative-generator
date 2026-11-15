@@ -75,15 +75,8 @@ def test_demo_mode_without_api_key(offline_generator, sales_results):
     assert offline_generator.api_available is False
     assert result["generation_method"] == "demo_mode"
     assert result["word_count"] > 0
-    # Demo mode scores its own text instead of reporting a fixed number
-    assert result["quality_score"] == offline_generator._assess_quality(result["narrative"])
-
-
-def test_quality_score_rewards_structure(offline_generator):
-    weak = "Sales went up."
-    strong = ("## Executive summary\n" + "Strategic performance analysis of the data shows trends. " * 40
-              + "\nWe recommend the executive team prioritize growth: revenue rose 12%.")
-    assert offline_generator._assess_quality(strong) > offline_generator._assess_quality(weak)
+    # Demo text isn't based on the data, so there's no number-check score to report
+    assert result["number_check_score"] is None
 
 
 def test_visualizer_returns_figures():

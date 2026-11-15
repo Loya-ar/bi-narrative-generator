@@ -755,6 +755,12 @@ def run_comprehensive_analysis(df, file_path):
         st.error(f"❌ Analysis error: {e}")
         st.info("💡 Try using demo datasets or check data format")
 
+def numbers_checked_text(narrative):
+    """'23 / 24' numbers checked against the analysis, or '–' when there were none."""
+    check = narrative.get('number_check')
+    return f"{check.checked} / {check.total}" if check is not None and check.total else "–"
+
+
 def show_period_analysis(results):
     """Latest-month comparisons, what drove the change, and unusual months."""
     comparisons = results.get('period_comparisons') or {}
@@ -1068,8 +1074,9 @@ def ai_narrative_section():
         if api_key and not st.session_state.demo_mode:
             st.success("🤖 **Google Gemini AI Ready** - Real AI generation with free API")
             
-            # Test API connection
-            if st.session_state.narrative_generator:
+            # Only on request: Streamlit reruns the page on every click, and each test
+            # is a Gemini request against the free-tier limits.
+            if st.session_state.narrative_generator and st.button("Test connection", type="secondary"):
                 api_status = st.session_state.narrative_generator.test_api_connection()
                 if api_status['status'] == 'success':
                     st.info(f"✅ API Test: {api_status['message']}")
@@ -1155,7 +1162,7 @@ def generate_advanced_narrative(narrative_style, audience, focus_area):
                 'style': narrative_style,
                 'audience': audience,
                 'focus': focus_area,
-                'quality': narrative_result.get('quality_score', 0),
+                'numbers_checked_pct': narrative_result.get('number_check_score'),
                 'words': narrative_result.get('word_count', 0)
             })
             
@@ -1293,7 +1300,7 @@ def complete_report_section():
     with col3:
         st.metric("📝 Report Words", f"{narrative.get('word_count', 0):,}")
     with col4:
-        st.metric("🎯 Quality Score", f"{narrative.get('quality_score', 0):.1f}%")
+        st.metric("✅ Numbers Checked", numbers_checked_text(narrative))
     with col5:
         multimodal_status = "✅" if narrative.get('demonstrates_multimodal', False) else "➖"
         st.metric("🔄 Multimodal", multimodal_status)
@@ -1369,7 +1376,7 @@ def complete_report_section():
             # Create readable metadata display instead of JSON
             
             model = narrative.get('model_used', 'Unknown')
-            quality = narrative.get('quality_score', 0)
+            quality = numbers_checked_text(narrative)
             words = narrative.get('word_count', 0)
             gen_time = narrative.get('generation_time', 0)
             multimodal = "Yes" if narrative.get('demonstrates_multimodal', False) else "No"
@@ -1378,7 +1385,7 @@ def complete_report_section():
             <div style="background: #f8fafc; padding: 1.5rem; border-radius: 8px; border: 1px solid #e2e8f0;">
                 <div style="color: #1e293b; font-family: 'Courier New', monospace; font-size: 0.85rem; line-height: 1.6;">
                     <strong style="color: #0c4a6e;">Model:</strong> {model}<br>
-                    <strong style="color: #0c4a6e;">Quality:</strong> {quality:.1f}/100<br>
+                    <strong style="color: #0c4a6e;">Numbers checked:</strong> {quality}<br>
                     <strong style="color: #0c4a6e;">Words:</strong> {words:,}<br>
                     <strong style="color: #0c4a6e;">Time:</strong> {gen_time:.1f}s<br>
                     <strong style="color: #0c4a6e;">Multimodal:</strong> {multimodal}
@@ -1584,8 +1591,8 @@ def export_html_report():
                 <div class="metric-label">Business Domain</div>
             </div>
             <div class="metric-card">
-                <div class="metric-value">{narrative.get('quality_score', 0):.1f}/100</div>
-                <div class="metric-label">Report Quality</div>
+                <div class="metric-value">{numbers_checked_text(narrative)}</div>
+                <div class="metric-label">Numbers Checked</div>
             </div>
             <div class="metric-card">
                 <div class="metric-value">{narrative.get('word_count', 0):,}</div>
@@ -1652,7 +1659,7 @@ def export_comprehensive_summary():
             },
             "ai_generation": {
                 "model_used": st.session_state.generated_narrative.get('model_used', 'Unknown'),
-                "quality_score": st.session_state.generated_narrative.get('quality_score', 0),
+                "numbers_checked_pct": st.session_state.generated_narrative.get('number_check_score'),
                 "word_count": st.session_state.generated_narrative.get('word_count', 0),
                 "generation_time": st.session_state.generated_narrative.get('generation_time', 0),
                 "multimodal_integration": st.session_state.generated_narrative.get('demonstrates_multimodal', False)

@@ -44,7 +44,7 @@ sys.path.append(current_dir)
 try:
     from data_processor import AdvancedDataProcessor
     from prompt_engine import DynamicPromptEngine
-    from narrative_generator import NarrativeGenerator
+    from narrative_generator import NarrativeGenerator, get_api_key
     from fact_check import highlight
     from visualizer import line_trend, bar_top_categories, scatter_xy, heatmap_corr, _style_fig
 except ImportError as e:
@@ -1060,7 +1060,7 @@ def ai_narrative_section():
     st.markdown("### 🔧 AI Generation Mode")
     
     # Check API availability
-    api_key = os.getenv('GEMINI_API_KEY') or os.getenv('GOOGLE_API_KEY')
+    api_key = get_api_key()
     
     col1, col2 = st.columns([3, 1])
     
@@ -1659,7 +1659,7 @@ def export_comprehensive_summary():
             },
             "technical_achievements": {
                 "dynamic_prompt_engineering": True,
-                "real_ai_integration": bool(os.getenv('GEMINI_API_KEY')),
+                "real_ai_integration": bool(get_api_key()),
                 "statistical_analysis": True,
                 "professional_visualizations": True,
                 "production_error_handling": True,
@@ -1707,7 +1707,7 @@ def export_complete_package():
             "📈 GENERATION HISTORY": st.session_state.generation_history,
             "⚙️ SYSTEM CONFIGURATION": {
                 "demo_mode": st.session_state.demo_mode,
-                "api_available": bool(os.getenv('GEMINI_API_KEY')),
+                "api_available": bool(get_api_key()),
                 "components_loaded": {
                     "data_processor": st.session_state.data_processor is not None,
                     "prompt_engine": st.session_state.prompt_engine is not None,
@@ -1742,7 +1742,7 @@ def system_status_sidebar():
         """, unsafe_allow_html=True)
         
         # API Status
-        api_key = os.getenv('GEMINI_API_KEY') or os.getenv('GOOGLE_API_KEY')
+        api_key = get_api_key()
         if api_key:
             st.markdown("""
             <div style="background: #f0fdf4; padding: 0.7rem; border-radius: 6px; border: 1px solid #22c55e; margin-bottom: 0.5rem;">

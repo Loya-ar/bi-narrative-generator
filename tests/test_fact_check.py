@@ -190,3 +190,9 @@ def test_demo_mode_reports_no_numbers(monkeypatch, sales_analysis):
     result = NarrativeGenerator().generate_narrative("x", analysis=sales_analysis)
     assert result["generation_method"] == "demo_mode"
     assert result["number_check"].total == 0
+
+
+def test_placeholder_key_means_demo_mode(monkeypatch):
+    monkeypatch.setenv("GEMINI_API_KEY", "your_gemini_api_key_here")
+    monkeypatch.delenv("GOOGLE_API_KEY", raising=False)
+    assert not NarrativeGenerator().api_available

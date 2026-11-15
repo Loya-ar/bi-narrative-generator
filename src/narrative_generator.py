@@ -23,6 +23,12 @@ from fact_check import build_fact_sheet, check_report, fact_sheet_text, fix_requ
 
 DEFAULT_MODEL = "gemini-3.5-flash-lite"  # free tier; gemini-2.5-flash is closed to new keys
 
+
+def get_api_key():
+    """GEMINI_API_KEY or GOOGLE_API_KEY; the .env.example placeholder counts as no key."""
+    key = (os.getenv('GEMINI_API_KEY') or os.getenv('GOOGLE_API_KEY') or '').strip()
+    return None if not key or key.startswith('your_') else key
+
 JSON_INSTRUCTIONS = """
 FACT SHEET (the only numbers you may use; ids in brackets):
 {facts}
@@ -53,7 +59,7 @@ class NarrativeGenerator:
 
     def __init__(self):
         # Get API key from environment
-        self.api_key = os.getenv('GEMINI_API_KEY') or os.getenv('GOOGLE_API_KEY')
+        self.api_key = get_api_key()
         self.model_name = os.getenv("GEMINI_MODEL", DEFAULT_MODEL)
 
         if self.api_key:

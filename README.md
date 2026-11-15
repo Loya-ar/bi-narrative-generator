@@ -6,7 +6,7 @@
 
 Built with Streamlit, pandas, SciPy, Plotly and the Gemini API. It also runs without an API key, in demo mode.
 
-![Upload and demo datasets](docs/screenshots/01-upload.png)
+![A generated report: every number checked against the analysis and shown in green](docs/screenshots/06-checked-report.jpg)
 
 ## Contents
 
@@ -71,6 +71,9 @@ It opens at http://localhost:8501. Without a key, the app runs in demo mode and 
 ## Using the app
 
 1. **Data Upload.** Upload a CSV or Excel file, or click one of the two demo datasets.
+
+   ![Upload and demo datasets](docs/screenshots/01-upload.png)
+
 2. **Analysis Results.** Review the metrics, trends and KPIs, then click **View Visualizations**.
 
    ![Analysis results](docs/screenshots/02-analysis.png)
@@ -79,6 +82,10 @@ It opens at http://localhost:8501. Without a key, the app runs in demo mode and 
 3. **AI Narrative Generation.** Pick a style, audience and focus, then generate.
 
    ![Narrative generation](docs/screenshots/04-narrative.png)
+
+   The report shows how many of its numbers match the analysis, and marks each one green (supported) or red (not supported):
+
+   ![Numbers checked: 43 / 43](docs/screenshots/05-number-check.jpg)
 
 4. **Complete Intelligence Report.** Read the full report and export it.
 

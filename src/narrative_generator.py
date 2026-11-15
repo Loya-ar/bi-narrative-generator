@@ -1,28 +1,66 @@
 """
-Narrative generation with the Google Gemini API.
+Narrative generation with the Google Gemini API, with every number checked.
 
 Reads GEMINI_API_KEY (or GOOGLE_API_KEY) from the environment. Without a key,
 or if the API call fails, it returns a pre-written demo narrative instead.
+
+With an analysis, the prompt gets a fact sheet (fact_check.build_fact_sheet) and
+Gemini returns JSON: the report plus the facts its numbers came from. Every number
+in the report is then checked against the fact sheet; if any fail, Gemini gets one
+correction pass with the real values. Use a free-tier key (no billing linked).
 """
 
+import json
 import os
 import time
-import json
 from datetime import datetime
+
 from google import genai
+from google.genai import types
+from pydantic import BaseModel
+
+from fact_check import build_fact_sheet, check_report, fact_sheet_text, fix_request
+
+DEFAULT_MODEL = "gemini-3.5-flash-lite"  # free tier; gemini-2.5-flash is closed to new keys
+
+JSON_INSTRUCTIONS = """
+FACT SHEET (the only numbers you may use; ids in brackets):
+{facts}
+
+OUTPUT FORMAT:
+Return JSON with two fields:
+- "report_markdown": the full report in Markdown.
+- "claims": one entry per number in the report, each with "text" (the sentence or phrase),
+  "value" (the number as written, e.g. 12.3 for "12.3%") and "fact_id" (the fact sheet id it comes from).
+Every number in the report must come from the fact sheet; you may round it. Don't calculate new
+numbers (differences, ratios, forecasts) and don't invent targets or benchmarks.
+"""
+
+
+class Claim(BaseModel):
+    text: str
+    value: float
+    fact_id: str
+
+
+class CheckedReport(BaseModel):
+    report_markdown: str
+    claims: list[Claim]
+
 
 class NarrativeGenerator:
     """Real AI narrative generation using Google Gemini API (FREE)."""
-    
+
     def __init__(self):
         # Get API key from environment
         self.api_key = os.getenv('GEMINI_API_KEY') or os.getenv('GOOGLE_API_KEY')
-        
+        self.model_name = os.getenv("GEMINI_MODEL", DEFAULT_MODEL)
+
         if self.api_key:
             try:
-                # Initialize Gemini client
-                self.client = genai.Client(api_key=self.api_key)
-                self.model_name = os.getenv("GEMINI_MODEL", "gemini-2.5-flash")
+                # 60 s timeout: an overloaded model should fail fast, not hang the app
+                self.client = genai.Client(api_key=self.api_key,
+                                           http_options=types.HttpOptions(timeout=60_000))
                 self.api_available = True
                 print("Gemini API initialized")
             except Exception as e:
@@ -31,39 +69,75 @@ class NarrativeGenerator:
         else:
             self.api_available = False
             print("No Gemini API key found - using demo mode")
-        
+
         self.generation_history = []
-    
-    def generate_narrative(self, prompt, narrative_type='executive_summary'):
-        """Generate business narrative using Google Gemini API."""
-        
+
+    def _call(self, prompt, structured):
+        """One Gemini call. Returns (report text, claims); claims are [] for plain text."""
+        if not structured:
+            response = self.client.models.generate_content(model=self.model_name, contents=prompt)
+            return response.text or "", []
+        response = self.client.models.generate_content(
+            model=self.model_name,
+            contents=prompt,
+            config=types.GenerateContentConfig(
+                response_mime_type="application/json",
+                response_schema=CheckedReport,
+                temperature=0.2,
+            ),
+        )
+        parsed = response.parsed
+        if parsed is None:  # schema not followed; fall back to the raw JSON or text
+            try:
+                parsed = CheckedReport.model_validate(json.loads(response.text))
+            except Exception:
+                return response.text or "", []
+        return parsed.report_markdown, [c.model_dump() for c in parsed.claims]
+
+    def generate_narrative(self, prompt, narrative_type='executive_summary', analysis=None):
+        """Generate business narrative using Google Gemini API.
+
+        With `analysis`, numbers are checked against it and fixed once if needed;
+        the result's 'number_check' holds the outcome.
+        """
+        facts = build_fact_sheet(analysis) if analysis else []
+
         if not self.api_available:
-            return self._demo_mode_response(prompt, narrative_type)
-        
+            return self._demo_mode_response(prompt, narrative_type, facts)
+
         try:
             start_time = time.time()
-            
-            # Make actual API call to Google Gemini
-            response = self.client.models.generate_content(
-                model=self.model_name,
-                contents=prompt
-            )
-            
+            full_prompt = prompt + JSON_INSTRUCTIONS.format(facts=fact_sheet_text(facts)) if facts else prompt
+            narrative_text, claims = self._call(full_prompt, structured=bool(facts))
+            check = check_report(narrative_text, facts, claims) if facts else None
+            first_check, auto_fixed = check, False
+
+            if check is not None and check.problems:
+                retry_prompt = (full_prompt + "\n\nYOUR PREVIOUS REPORT:\n" + narrative_text +
+                                "\n\n" + fix_request(check, facts))
+                fixed_text, fixed_claims = self._call(retry_prompt, structured=True)
+                fixed_check = check_report(fixed_text, facts, fixed_claims)
+                if fixed_text.strip() and len(fixed_check.problems) <= len(check.problems):
+                    narrative_text, claims, check, auto_fixed = fixed_text, fixed_claims, fixed_check, True
+
             generation_time = time.time() - start_time
-            narrative_text = response.text
-            
+
             # Calculate quality metrics
             result = {
                 'narrative': narrative_text,
                 'quality_score': self._assess_quality(narrative_text),
                 'word_count': len(narrative_text.split()),
                 'generation_time': generation_time,
-                'estimated_cost': 0.00,  # Gemini is free!
+                'estimated_cost': 0.00,  # free-tier key
                 'model_used': f'Google {self.model_name}',
                 'generation_method': 'gemini_api',
                 'narrative_type': narrative_type,
                 'meets_quality_threshold': len(narrative_text.split()) > 200,
-                'api_status': 'success'
+                'api_status': 'success',
+                'claims': claims,
+                'number_check': check,
+                'number_check_first_draft': first_check,
+                'auto_fixed': auto_fixed,
             }
             
             # Store in history
@@ -80,7 +154,7 @@ class NarrativeGenerator:
             
         except Exception as e:
             print(f"Gemini API error: {e}")
-            return self._handle_api_error(e, prompt, narrative_type)
+            return self._handle_api_error(e, prompt, narrative_type, facts)
     
     def _assess_quality(self, narrative_text):
         """Assess narrative quality with comprehensive metrics."""
@@ -108,8 +182,11 @@ class NarrativeGenerator:
         
         return round(quality_score, 1)
     
-    def _demo_mode_response(self, prompt, narrative_type):
-        """Pre-written sample narrative, used when no API key is set or the API call fails."""
+    def _demo_mode_response(self, prompt, narrative_type, facts=None):
+        """Pre-written sample narrative, used when no API key is set or the API call fails.
+
+        The samples contain no figures, so the number check finds nothing to verify.
+        """
         
         demo_narratives = {
             'executive_summary': """# Executive Business Intelligence Summary
@@ -181,10 +258,14 @@ Establish quarterly performance reviews utilizing advanced analytics for continu
             'generation_method': 'demo_mode',
             'narrative_type': narrative_type,
             'meets_quality_threshold': True,
-            'api_status': 'demo_fallback'
+            'api_status': 'demo_fallback',
+            'claims': [],
+            'number_check': check_report(selected_narrative, facts) if facts else None,
+            'number_check_first_draft': None,
+            'auto_fixed': False,
         }
-    
-    def _handle_api_error(self, error, prompt, narrative_type):
+
+    def _handle_api_error(self, error, prompt, narrative_type, facts=None):
         """Handle API errors gracefully."""
         error_msg = str(error)
         
@@ -198,7 +279,7 @@ Establish quarterly performance reviews utilizing advanced analytics for continu
             status = "general_error"
             solution = "API temporarily unavailable - using demo fallback"
         
-        demo_result = self._demo_mode_response(prompt, narrative_type)
+        demo_result = self._demo_mode_response(prompt, narrative_type, facts)
         demo_result.update({
             'api_error': error_msg,
             'error_status': status,

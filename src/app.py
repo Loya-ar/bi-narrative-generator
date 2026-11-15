@@ -45,6 +45,7 @@ try:
     from data_processor import AdvancedDataProcessor
     from prompt_engine import DynamicPromptEngine
     from narrative_generator import NarrativeGenerator
+    from fact_check import highlight
     from visualizer import line_trend, bar_top_categories, scatter_xy, heatmap_corr, _style_fig
 except ImportError as e:
     st.error(f"❌ Import Error: {e}")
@@ -1091,7 +1092,8 @@ def generate_advanced_narrative(narrative_style, audience, focus_area):
 
             narrative_result = st.session_state.narrative_generator.generate_narrative(
                 prompt=dynamic_prompt,
-                narrative_type=narrative_style
+                narrative_type=narrative_style,
+                analysis=analysis_results,
             )
             narrative_result['demonstrates_multimodal'] = bool(chart_descriptions)
             
@@ -1108,7 +1110,12 @@ def generate_advanced_narrative(narrative_style, audience, focus_area):
                 'words': narrative_result.get('word_count', 0)
             })
             
-            st.success(f"🎉 Generated {narrative_result.get('word_count', 0)} words with {narrative_result.get('quality_score', 0):.1f}% quality!")
+            check = narrative_result.get('number_check')
+            if check is not None and check.total:
+                st.success(f"🎉 Generated {narrative_result.get('word_count', 0)} words; "
+                           f"{check.checked} of {check.total} numbers checked against the analysis.")
+            else:
+                st.success(f"🎉 Generated {narrative_result.get('word_count', 0)} words.")
     
     except Exception as e:
         st.error(f"❌ Generation error: {e}")
@@ -1124,10 +1131,15 @@ def display_generated_narrative():
     
     col1, col2, col3, col4 = st.columns(4)
     
+    check = narrative.get('number_check')
     with col1:
-        quality_score = narrative.get('quality_score', 0)
-        quality_color = "🟢" if quality_score >= 90 else "🟡" if quality_score >= 75 else "🔴"
-        st.metric(f"{quality_color} Quality Score", f"{quality_score:.1f}/100")
+        if check is not None and check.total:
+            icon = "🟢" if not check.problems else "🔴"
+            st.metric(f"{icon} Numbers checked", f"{check.checked} / {check.total}",
+                      help="Every number in the report is compared with the computed analysis "
+                           "(rounding allowed). Red numbers aren't supported by the data.")
+        else:
+            st.metric("Numbers checked", "–", help="The report contains no numbers to check.")
     
     with col2:
         word_count = narrative.get('word_count', 0)
@@ -1145,16 +1157,26 @@ def display_generated_narrative():
     st.markdown("### 📄 Executive Business Report")
     
     narrative_text = narrative.get('narrative', '')
-    
-    # Professional narrative display
-    st.markdown(f"""
-    <div style="background: white; padding: 3rem; border-radius: 15px; 
-                border: 2px solid #e9ecef; margin: 2rem 0;
-                font-family: 'Georgia', serif; line-height: 1.8; color: #2c3e50;
-                box-shadow: 0 5px 15px rgba(0,0,0,0.08);">
-        {narrative_text.replace(chr(10), '<br><br>')}
-    </div>
-    """, unsafe_allow_html=True)
+
+    # Report with each number marked: green = matches the analysis, red = not supported
+    if check is not None and check.total:
+        legend = ("<span style='color:#065f46;background:#d1fae5;padding:0 4px;border-radius:4px'>green</span>"
+                  " = matches the analysis · "
+                  "<span style='color:#991b1b;background:#fee2e2;padding:0 4px;border-radius:4px'>red</span>"
+                  " = not supported by the data (hover a number for details)")
+        st.markdown(legend, unsafe_allow_html=True)
+        if narrative.get('auto_fixed'):
+            first = narrative.get('number_check_first_draft')
+            st.info(f"🔧 The first draft had {len(first.problems)} unsupported number(s); "
+                    f"Gemini was asked once to correct them using the real values.")
+    with st.container(border=True):
+        st.markdown(highlight(narrative_text, check) if check is not None else narrative_text,
+                    unsafe_allow_html=True)
+
+    if check is not None and check.problems:
+        with st.expander(f"⚠️ {len(check.problems)} number(s) not supported by the analysis"):
+            st.dataframe(pd.DataFrame([{"As written": n.text, "Problem": n.note} for n in check.problems]),
+                         hide_index=True, width="stretch")
     
     # Generation Details
     if narrative.get('demonstrates_multimodal', False) and narrative.get('generation_method') != 'demo_mode':

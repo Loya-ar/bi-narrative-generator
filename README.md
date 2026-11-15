@@ -20,10 +20,10 @@ Built with Streamlit, pandas, SciPy, Plotly and the Gemini API. It also runs wit
 ## How it works
 
 ```
-CSV / Excel ──► Data processor ──► Prompt engine ──► Gemini ──► Narrative ──► HTML / Markdown / JSON export
-                 trends, KPIs,      style + audience            (or demo text
-                 correlations,      + domain + charts            without a key)
-                 business domain
+CSV / Excel ──► Data processor ──► Prompt engine ──► Gemini ──► Number check ──► Narrative ──► export
+                 trends, KPIs,      style + audience  (JSON:    every number vs     green / red
+                 correlations,      + domain + charts  report +  the analysis;       numbers
+                 business domain    + fact sheet       claims)   one fix pass
 ```
 
 | Step | What happens | Code |
@@ -31,7 +31,8 @@ CSV / Excel ──► Data processor ──► Prompt engine ──► Gemini �
 | **Analyse** | Detects the business domain from column names. Computes monthly trends (when there's a date column), KPIs, correlations and a data-quality score | `src/data_processor.py` |
 | **Visualise** | Monthly trend line, breakdown by category and a correlation heatmap. Each chart also gets a one-line description with real numbers | `src/app.py`, `src/visualizer.py` |
 | **Prompt** | Builds a prompt from the analysis, the chosen **style** (4), **audience** (4) and **domain** (5), plus the chart descriptions so the model can refer to the charts | `src/prompt_engine.py` |
-| **Generate** | Sends the prompt to Gemini (`gemini-2.5-flash` by default). Without a key, or if the call fails, it shows a pre-written demo narrative and labels it as such | `src/narrative_generator.py` |
+| **Generate** | Adds a fact sheet (every number the analysis computed, with an id) and asks Gemini (`gemini-3.5-flash-lite` by default, free tier) for JSON: the report plus, for each number, the fact it came from. Without a key, or if the call fails, it shows a pre-written demo narrative and labels it as such | `src/narrative_generator.py` |
+| **Check numbers** | Finds every number in the report text, not just the declared ones, and compares it with the fact sheet, allowing for rounding, percent and K/M/B formats. If any number is wrong or unsupported, Gemini gets one correction pass with the real values. The app shows each number green (matches the analysis) or red (not supported), and a score such as "23 / 24 numbers checked" | `src/fact_check.py` |
 | **Score** | A heuristic checklist rates the text on length, structure, business language, figures and actionable recommendations | `src/narrative_generator.py` |
 | **Export** | HTML report, data summary (JSON) and full package (JSON) | `src/app.py` |
 
@@ -50,7 +51,7 @@ python -m venv .venv
 pip install -r requirements.txt
 ```
 
-**Add a Gemini API key** (optional, free at [ai.google.dev](https://ai.google.dev/)):
+**Add a Gemini API key** (optional, free at [aistudio.google.com/apikey](https://aistudio.google.com/apikey); use a Google project with no billing linked, so it can never charge):
 
 ```bash
 cp .env.example .env
@@ -93,7 +94,8 @@ bi-narrative-generator/
 │   ├── app.py                  # Streamlit app (entry point)
 │   ├── data_processor.py       # Analysis: domain, trends, KPIs, correlations, quality
 │   ├── prompt_engine.py        # Builds the prompt from analysis + style + audience
-│   ├── narrative_generator.py  # Gemini client, demo fallback, quality scoring
+│   ├── narrative_generator.py  # Gemini client (JSON output, one fix pass), demo fallback
+│   ├── fact_check.py           # Fact sheet, number checker, green/red highlighting
 │   └── visualizer.py           # Plotly chart helpers
 ├── scripts/
 │   └── generate_sample_data.py # Regenerates the sample datasets
@@ -131,10 +133,11 @@ Regenerate the main ones with `python scripts/generate_sample_data.py`.
 pytest
 ```
 
-17 tests cover the analysis output, domain detection, monthly trend calculation, that every sample dataset loads, prompt adaptation to style and audience, demo mode without a key, the quality scorer and the chart helpers. None of them calls the API.
+34 tests cover the analysis output, domain detection, monthly trend calculation, that every sample dataset loads, prompt adaptation to style and audience, demo mode without a key, the quality scorer, the chart helpers, and the number checker: parsing formats like `$1.2M` and `12.3%`, rounding, wrong versus unsupported numbers, highlighting, and the correction pass (with a fake Gemini). None of them calls the API.
 
 ## Limitations
 
+- **The number check confirms a number exists in the analysis, not that the sentence uses it correctly.** "Revenue fell 12%" passes if 12% is a real change, even if the sentence mixes up which measure fell. Signs are ignored, and a rounded number (e.g. 12%) can match any fact that rounds to it.
 - **The quality score is a heuristic.** It checks for things like headings, business vocabulary, figures and recommendation verbs. It doesn't judge accuracy.
 - **Demo mode shows pre-written text** that isn't based on your data. Real, data-specific narratives need a Gemini API key.
 - **Domain detection matches keywords in column names**, so unusual column names can be misclassified.

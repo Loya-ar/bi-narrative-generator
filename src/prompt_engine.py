@@ -150,6 +150,9 @@ INSTRUCTIONS:
 8. Structure the report with clear sections and bullet points
 9. Include quantitative evidence to support all claims
 10. End with clear next steps and strategic priorities
+11. Where a measure has "no statistically clear trend", don't call it growth, decline, momentum or an upward/downward movement; say it moved between the first and last month and that month-to-month swings are large
+12. {"Statistics such as p-values and R squared may be cited" if audience == 'analyst' else "Don't quote p-values or R squared; say in plain words whether a trend is clear"}
+13. Pick the numbers that matter; don't list every figure from the analysis
 
 Generate a comprehensive {narrative_style.replace('_', ' ')} report now:"""
         

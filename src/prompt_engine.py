@@ -44,10 +44,25 @@ class DynamicPromptEngine:
             'operations': 'efficiency, productivity, operational excellence',
             'general': 'overall business performance and strategic insights'
         }
-    
-    def generate_dynamic_prompt(self, analysis_results, narrative_style, audience):
+
+        # The "Focus Area" chosen in the app. 'overall_performance' is the default
+        # and adds nothing, so the default prompt (and the published evaluation) is unchanged.
+        self.focus_instructions = {
+            'overall_performance': None,
+            'growth_trends': ("Lead with growth: the month-over-month and year-over-year changes and "
+                              "which segments drove them, before anything else"),
+            'risk_analysis': ("Lead with risks: declines, unusual months and data-quality issues, "
+                              "and what each could mean for the business, before anything else"),
+            'optimization_opportunities': ("Lead with opportunities: the weakest segments and measures, and "
+                                           "concrete actions to improve them, before anything else"),
+        }
+
+    def generate_dynamic_prompt(self, analysis_results, narrative_style, audience,
+                                focus_area='overall_performance'):
         """Generate context-aware prompts based on analysis results."""
-        
+        focus_instruction = self.focus_instructions.get(focus_area)
+        focus_line = f"\n14. {focus_instruction}" if focus_instruction else ""
+
         # Extract analysis context
         metadata = analysis_results.get('metadata', {})
         trends = analysis_results.get('trends', {})
@@ -152,7 +167,7 @@ INSTRUCTIONS:
 10. End with clear next steps and strategic priorities
 11. Where a measure has "no statistically clear trend", don't call it growth, decline, momentum or an upward/downward movement; say it moved between the first and last month and that month-to-month swings are large
 12. {"Statistics such as p-values and R squared may be cited" if audience == 'analyst' else "Don't quote p-values or R squared; say in plain words whether a trend is clear"}
-13. Pick the numbers that matter; don't list every figure from the analysis
+13. Pick the numbers that matter; don't list every figure from the analysis{focus_line}
 
 Generate a comprehensive {narrative_style.replace('_', ' ')} report now:"""
         

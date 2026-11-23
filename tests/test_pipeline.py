@@ -69,6 +69,26 @@ def test_prompt_adapts_to_style_and_audience(sales_results):
     assert engine.validate_prompt_quality(exec_prompt)["quality_score"] == 100
 
 
+def test_default_focus_leaves_prompt_unchanged(sales_results):
+    # The published evaluation ran without a focus, so the default must add nothing
+    engine = DynamicPromptEngine()
+    without = engine.generate_dynamic_prompt(sales_results, "executive_summary", "executive")
+    default = engine.generate_dynamic_prompt(sales_results, "executive_summary", "executive",
+                                             focus_area="overall_performance")
+    assert default == without
+    assert "\n14. " not in default
+
+
+@pytest.mark.parametrize("focus", ["growth_trends", "risk_analysis", "optimization_opportunities"])
+def test_focus_area_changes_prompt(sales_results, focus):
+    engine = DynamicPromptEngine()
+    base = engine.generate_dynamic_prompt(sales_results, "executive_summary", "executive")
+    focused = engine.generate_dynamic_prompt(sales_results, "executive_summary", "executive", focus_area=focus)
+    assert f"14. {engine.focus_instructions[focus]}" in focused
+    # The instruction is the only difference
+    assert focused.replace(f"\n14. {engine.focus_instructions[focus]}", "") == base
+
+
 def test_demo_mode_without_api_key(offline_generator, sales_results):
     prompt = DynamicPromptEngine().generate_dynamic_prompt(sales_results, "executive_summary", "executive")
     result = offline_generator.generate_narrative(prompt)

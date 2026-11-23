@@ -131,7 +131,8 @@ def generate_advanced_narrative(narrative_style, audience, focus_area):
             dynamic_prompt = st.session_state.prompt_engine.generate_dynamic_prompt(
                 analysis_results=analysis_results,
                 narrative_style=narrative_style,
-                audience=audience
+                audience=audience,
+                focus_area=focus_area,
             )
             
             # Add multimodal context if visualizations exist

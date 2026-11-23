@@ -33,7 +33,7 @@ CSV / Excel ──► Data processor ──► Prompt engine ──► Gemini �
 |---|---|---|
 | **Analyse** | Detects the business domain from column names. With a date column, totals each measure per month (rates and ratios are averaged), then: a trend that's called increasing or decreasing only if the regression p-value is below 0.05; the latest month vs the month before and the same month a year earlier; which segments (region, product, channel...) drove the change from the first to the last month; and unusual months (robust z-score above 3.5). Also KPIs, correlations and a data-quality score | `src/data_processor.py` |
 | **Visualise** | Monthly trend line, breakdown by category and a correlation heatmap. Each chart also gets a one-line description with real numbers | `src/page_analysis.py`, `src/visualizer.py` |
-| **Prompt** | Builds a prompt from the analysis, the chosen **style** (4), **audience** (4) and **domain** (5), plus the chart descriptions so the model can refer to the charts | `src/prompt_engine.py` |
+| **Prompt** | Builds a prompt from the analysis, the chosen **style** (4) and **audience** (4), the **business domain** detected from the columns (sales, marketing, finance, operations or general), plus the chart descriptions so the model can refer to the charts | `src/prompt_engine.py` |
 | **Generate** | Adds a fact sheet (every number the analysis computed, with an id) and asks Gemini (`gemini-3.5-flash-lite` by default, free tier) for JSON: the report plus, for each number, the fact it came from. Without a key, or if the call fails, it shows a pre-written demo narrative and labels it as such | `src/narrative_generator.py` |
 | **Check numbers** | Finds every number in the report text, not just the declared ones, and compares it with the fact sheet, allowing for rounding, percent and K/M/B formats. If any number is wrong or unsupported, Gemini gets one correction pass with the real values. The app shows each number green (matches the analysis) or red (not supported), and a score such as "23 / 24 numbers checked" | `src/fact_check.py` |
 | **Export** | HTML report, data summary (JSON) and full package (JSON) | `src/app.py` |
@@ -147,7 +147,7 @@ Regenerate the main ones with `python scripts/generate_sample_data.py`.
 
 ## Evaluation
 
-`scripts/run_eval.py` generated reports for the 7 sample datasets in 2 styles (executive summary for executives, detailed analysis for analysts) with `gemini-3.5-flash-lite` on a free-tier key, and checked every number. Full table: [evaluation/summary.md](evaluation/summary.md); the reports themselves: [evaluation/examples/](evaluation/examples/).
+`scripts/run_eval.py` generated reports for 7 of the 8 sample datasets (`sales_sample.csv` is left out because it's a 20-row slice of `sales_performance_2023.csv`) in 2 styles (executive summary for executives, detailed analysis for analysts) with `gemini-3.5-flash-lite` on a free-tier key, and checked every number. Full table: [evaluation/summary.md](evaluation/summary.md); the reports themselves: [evaluation/examples/](evaluation/examples/).
 
 | Version | Numbers supported by the analysis | Share |
 |---|---|---|
@@ -180,6 +180,6 @@ pytest
 
 ## About
 
-Built by **Arjun Loya** for *ST. Prompt Engineering & AI* at Northeastern University, August 2025. The course write-up is in [`docs/project-report.pdf`](docs/project-report.pdf), and there's a demo video on [YouTube](https://www.youtube.com/watch?v=I9AnaoJjAGc).
+Built by **Arjun Loya** for *Prompt Engineering & AI* at Northeastern University, August 2025. The course write-up is in [`docs/project-report.pdf`](docs/project-report.pdf), and there's a demo video on [YouTube](https://www.youtube.com/watch?v=I9AnaoJjAGc).
 
 Released under the [MIT License](LICENSE).
